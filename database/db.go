@@ -31,7 +31,7 @@ func (c *Conn) connect() {
 	database := os.Getenv("DB_NAME")
 	user := os.Getenv("DB_USER")
 	password := os.Getenv("DB_PASSWORD")
-	sslmode := "disable"
+	sslmode := "verify-full"
 	port, err := strconv.ParseUint(os.Getenv("DB_PORT"), 0, 64)
 	if err != nil {
 		log.Fatal(fmt.Println(err))
@@ -120,35 +120,25 @@ func (c *Conn) RebuildIndexes(db *sql.DB, dbname string) {
 
 // Insert method make a single row query to the databases
 func (c *Conn) Insert(ctx context.Context, query string, args ...interface{}) *sql.Row {
-	ctx, cancel := context.WithTimeout(ctx, time.Duration(c.timeout)*time.Second)
-	defer cancel()
 	return c.conn.QueryRowContext(ctx, query, args...)
 }
 
 // Query method make a resultset rows query to the databases
 func (c *Conn) Query(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
-	ctx, cancel := context.WithTimeout(ctx, time.Duration(c.timeout)*time.Second)
-	defer cancel()
 	return c.conn.QueryContext(ctx, query, args...)
 }
 
 // Select method make a single row query to the databases
 func (c *Conn) Select(ctx context.Context, query string, args ...interface{}) *sql.Row {
-	ctx, cancel := context.WithTimeout(ctx, time.Duration(c.timeout)*time.Second)
-	defer cancel()
 	return c.conn.QueryRowContext(ctx, query, args...)
 }
 
 // Update method executes update database changes to the databases
 func (c *Conn) Update(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
-	ctx, cancel := context.WithTimeout(ctx, time.Duration(c.timeout)*time.Second)
-	defer cancel()
 	return c.conn.ExecContext(ctx, query, args...)
 }
 
 // Delete method executes delete database changes to the databases
 func (c *Conn) Delete(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
-	ctx, cancel := context.WithTimeout(ctx, time.Duration(c.timeout)*time.Second)
-	defer cancel()
 	return c.conn.ExecContext(ctx, query, args...)
 }

@@ -1,16 +1,13 @@
 package server
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"os"
 	"strings"
+	"time"
 )
-
-type ContextKey string
-
-const ContextWebPublicKey ContextKey = "webPublicKey"
-const ContextServerPrivateKey ContextKey = "serverPrivateKey"
 
 // Order of the Middleware
 // 1. set headers
@@ -20,7 +17,7 @@ const ContextServerPrivateKey ContextKey = "serverPrivateKey"
 // 5. preflight
 // 6. Check Permissions
 // 7. CheckAuth/WithoutAuth
-// 8. SetEncryptionKey
+// 8. CheckRequestId
 
 // SetHeaders // prepare header response
 func SetHeaders() Middleware {
@@ -29,7 +26,7 @@ func SetHeaders() Middleware {
 
 			(w).Header().Set("Content-Type", "application/json")
 			(w).Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE")
-			(w).Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding, X-CSRF-JWT, Authorization")
+			(w).Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding, X-CSRF-JWT, Authorization, request-id")
 
 			// continue
 			h.ServeHTTP(w, r)
@@ -135,7 +132,7 @@ func CheckPermission(meta *Meta) Middleware {
 			token, err := meta.JWT.GetToken(r)
 			if err != nil {
 				w.WriteHeader(http.StatusUnauthorized)
-				Error(w, r, errors.New("Unauthorized"))
+				meta.Error(w, r, errors.New("Unauthorized"))
 				return
 			}
 
@@ -147,7 +144,7 @@ func CheckPermission(meta *Meta) Middleware {
 
 			if allowed {
 				w.WriteHeader(http.StatusUnauthorized)
-				Error(w, r, errors.New("Unauthorized"))
+				meta.Error(w, r, errors.New("Unauthorized"))
 				return
 			}
 
@@ -166,7 +163,7 @@ func CheckAuth(meta *Meta) Middleware {
 			err := meta.JWT.TokenValid(r)
 			if err != nil {
 				w.WriteHeader(http.StatusUnauthorized)
-				Error(w, r, errors.New("Unauthorized"))
+				meta.Error(w, r, errors.New("Unauthorized"))
 				return
 			}
 
@@ -182,6 +179,59 @@ func WithoutAuth() Middleware {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// continue
 			h.ServeHTTP(w, r)
+		})
+	}
+}
+
+// CheckAuth validates request for jwt header
+func CheckRequestId(meta *Meta) Middleware {
+	return func(h http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+
+			// validate jwt
+			requestId := r.Header.Get("request-id")
+			if requestId == "" {
+				w.WriteHeader(http.StatusNotAcceptable)
+				meta.Error(w, r, errors.New("Unauthorized"))
+				return
+			}
+
+			_, found := meta.Cache.Get(requestId)
+			if found {
+				w.WriteHeader(http.StatusNotAcceptable)
+				meta.Error(w, r, errors.New("Unauthorized"))
+				return
+			}
+
+			// set requestId in memory
+			meta.Cache.Set(requestId, requestId, time.Duration(10))
+
+			// continue
+			h.ServeHTTP(w, r)
+		})
+	}
+}
+
+// CheckProcessTimeout put a time limit for the handler process duration and will give an error response if timeout
+func CheckProcessTimeout(meta *Meta) Middleware {
+	return func(h http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ctx, cancel := context.WithTimeout(r.Context(), time.Duration(meta.timeout))
+			defer cancel()
+
+			r = r.WithContext(ctx)
+
+			processDone := make(chan bool)
+			go func() {
+				h.ServeHTTP(w, r)
+				processDone <- true
+			}()
+
+			select {
+			case <-ctx.Done():
+				w.Write([]byte(`{"error": "process timeout"}`))
+			case <-processDone:
+			}
 		})
 	}
 }

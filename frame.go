@@ -11,6 +11,7 @@ import (
 	gfcron "github.com/greatfocus/gf-cron"
 	"github.com/greatfocus/gf-sframe/cache"
 	"github.com/greatfocus/gf-sframe/database"
+	"github.com/greatfocus/gf-sframe/logger"
 	"github.com/greatfocus/gf-sframe/server"
 	"github.com/joho/godotenv"
 )
@@ -60,13 +61,17 @@ func (f *Frame) init(impl *Impl) *server.Meta {
 	// create new broker instance
 	bus := f.initServiceBus()
 
+	// init creates instance of logger
+	logger := f.initLogger(impl.Service)
+
 	return &server.Meta{
-		Env:   impl.Env,
-		Cron:  cron,
-		Cache: cache,
-		DB:    db,
-		JWT:   jwt,
-		Bus:   bus,
+		Env:    impl.Env,
+		Cron:   cron,
+		Cache:  cache,
+		DB:     db,
+		JWT:    jwt,
+		Bus:    bus,
+		Logger: logger,
 	}
 }
 
@@ -115,4 +120,10 @@ func (f *Frame) initServiceBus() *gfbus.Bus {
 	// create service bus
 	bus := gfbus.New()
 	return &bus
+}
+
+// initServiceBus provides bus instance
+func (f *Frame) initLogger(serviceName string) *logger.Logger {
+	// create service bus
+	return logger.NewLogger(serviceName)
 }

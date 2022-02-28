@@ -8,13 +8,7 @@ import (
 )
 
 // Publish -
-func NewPublish(
-	exchange,
-	exchangeType,
-	queueName,
-	routingKey string,
-	data []byte,
-	reliable bool) {
+func Publish(exchange, exchangeType, queueName, routingKey string, data []byte, reliable bool) {
 	URL := os.Getenv("RABBITMQ_URL")
 	log.Printf("dialing %q", URL)
 	connection, err := amqp.Dial(URL)
