@@ -1,20 +1,29 @@
 package server
 
 import (
+	"bytes"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
+	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/base64"
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
+	"io/ioutil"
 	"log"
+	"math/big"
+	"net"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
 	"time"
 
 	gfbus "github.com/greatfocus/gf-bus"
 	gfcron "github.com/greatfocus/gf-cron"
+	"github.com/greatfocus/gf-sframe/broker"
 	"github.com/greatfocus/gf-sframe/cache"
 	"github.com/greatfocus/gf-sframe/database"
 	"github.com/greatfocus/gf-sframe/logger"
@@ -32,6 +41,7 @@ type Meta struct {
 	Cron       *gfcron.Cron
 	JWT        *JWT
 	Bus        *gfbus.Bus
+	Broker     *broker.Conn
 	Logger     *logger.Logger
 	publicKey  *rsa.PublicKey
 	privateKey *rsa.PrivateKey
@@ -46,7 +56,7 @@ type Response struct {
 // Start the server
 func (m *Meta) Start() {
 	// Generate encryption keys
-	publicKey, privatekey := generatePrivatePublicKeys()
+	publicKey, privatekey := generatePKI()
 	m.publicKey = publicKey
 	m.privateKey = privatekey
 
@@ -86,7 +96,11 @@ func (m *Meta) serve() {
 	// create server connection
 	crt := os.Getenv("APP_PATH") + "server.crt"
 	key := os.Getenv("ENV") + "server.key"
-	log.Println("Listening to port HTTP", addr)
+
+	// generate self-sing key
+	GenerateSelfSignedCert(os.Getenv("SERVER_HOST"), crt, key)
+
+	m.Logger.InfoLogger.Println("Listening to port HTTP", addr)
 	log.Fatal(srv.ListenAndServeTLS(crt, key))
 }
 
@@ -131,8 +145,8 @@ func (m *Meta) Decrypt(cipherText string) string {
 	return string(plaintext)
 }
 
-// generatePrivatePublicKeys provides encryption keys
-func generatePrivatePublicKeys() (*rsa.PublicKey, *rsa.PrivateKey) {
+// generatePKI provides encryption keys
+func generatePKI() (*rsa.PublicKey, *rsa.PrivateKey) {
 	// generate key
 	privatekey, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
@@ -155,6 +169,72 @@ func encrypt(secretMessage string, key rsa.PublicKey) string {
 // checkError validate error
 func checkError(e error) {
 	if e != nil {
-		fmt.Println(e.Error)
+		log.Printf("Decryption failed : %s", e)
 	}
+}
+
+// GenerateSelfSignedCert creates a self-signed certificate and key for the given host.
+// Host may be an IP or a DNS name
+// The certificate will be created with file mode 0644. The key will be created with file mode 0600.
+// If the certificate or key files already exist, they will be overwritten.
+// Any parent directories of the certPath or keyPath will be created as needed with file mode 0755.
+func GenerateSelfSignedCert(host, certPath, keyPath string) error {
+	priv, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		return err
+	}
+
+	template := x509.Certificate{
+		SerialNumber: big.NewInt(1),
+		Subject: pkix.Name{
+			CommonName: fmt.Sprintf("%s@%d", host, time.Now().Unix()),
+		},
+		NotBefore: time.Now(),
+		NotAfter:  time.Now().Add(time.Hour * 24 * 365),
+
+		KeyUsage:              x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		BasicConstraintsValid: true,
+	}
+
+	if ip := net.ParseIP(host); ip != nil {
+		template.IPAddresses = append(template.IPAddresses, ip)
+	} else {
+		template.DNSNames = append(template.DNSNames, host)
+	}
+
+	derBytes, err := x509.CreateCertificate(rand.Reader, &template, &template, &priv.PublicKey, priv)
+	if err != nil {
+		return err
+	}
+
+	// Generate cert
+	certBuffer := bytes.Buffer{}
+	if err := pem.Encode(&certBuffer, &pem.Block{Type: "CERTIFICATE", Bytes: derBytes}); err != nil {
+		return err
+	}
+
+	// Generate key
+	keyBuffer := bytes.Buffer{}
+	if err := pem.Encode(&keyBuffer, &pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(priv)}); err != nil {
+		return err
+	}
+
+	// Write cert
+	if err := os.MkdirAll(filepath.Dir(certPath), os.FileMode(0755)); err != nil {
+		return err
+	}
+	if err := ioutil.WriteFile(certPath, certBuffer.Bytes(), os.FileMode(0644)); err != nil {
+		return err
+	}
+
+	// Write key
+	if err := os.MkdirAll(filepath.Dir(keyPath), os.FileMode(0755)); err != nil {
+		return err
+	}
+	if err := ioutil.WriteFile(keyPath, keyBuffer.Bytes(), os.FileMode(0600)); err != nil {
+		return err
+	}
+
+	return nil
 }

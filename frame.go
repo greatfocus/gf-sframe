@@ -9,6 +9,7 @@ import (
 
 	gfbus "github.com/greatfocus/gf-bus"
 	gfcron "github.com/greatfocus/gf-cron"
+	"github.com/greatfocus/gf-sframe/broker"
 	"github.com/greatfocus/gf-sframe/cache"
 	"github.com/greatfocus/gf-sframe/database"
 	"github.com/greatfocus/gf-sframe/logger"
@@ -58,8 +59,11 @@ func (f *Frame) init(impl *Impl) *server.Meta {
 	// initCron creates instance of cron
 	jwt := f.initJWT()
 
-	// create new broker instance
+	// create new bus instance
 	bus := f.initServiceBus()
+
+	// create new broker instance
+	broker := f.initServiceBroker()
 
 	// init creates instance of logger
 	logger := f.initLogger(impl.Service)
@@ -72,6 +76,7 @@ func (f *Frame) init(impl *Impl) *server.Meta {
 		JWT:    jwt,
 		Bus:    bus,
 		Logger: logger,
+		Broker: broker,
 	}
 }
 
@@ -120,6 +125,15 @@ func (f *Frame) initServiceBus() *gfbus.Bus {
 	// create service bus
 	bus := gfbus.New()
 	return &bus
+}
+
+// initServiceBroker provides broker instance
+func (f *Frame) initServiceBroker() *broker.Conn {
+	conn, err := broker.GetConn("amqp://guest:guest@localhost")
+	if err != nil {
+		panic(err)
+	}
+	return conn
 }
 
 // initServiceBus provides bus instance
