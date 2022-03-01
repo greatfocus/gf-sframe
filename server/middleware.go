@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"errors"
+	"log"
 	"net/http"
 	"os"
 	"strings"
@@ -229,7 +230,7 @@ func CheckProcessTimeout(meta *Meta) Middleware {
 
 			select {
 			case <-ctx.Done():
-				w.Write([]byte(`{"error": "process timeout"}`))
+				log.Println([]byte(`{"error": "process timeout"}`))
 			case <-processDone:
 			}
 		})

@@ -14,8 +14,7 @@ import (
 
 // Conn struct
 type Conn struct {
-	conn    *sql.DB
-	timeout int64
+	conn *sql.DB
 }
 
 // Init database connection
