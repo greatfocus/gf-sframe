@@ -2,7 +2,6 @@ package broker
 
 import (
 	"fmt"
-	"os"
 
 	amqp "github.com/greatfocus/gf-amqp"
 )
@@ -85,13 +84,12 @@ func (conn Conn) StartConsumer(exchange, queueName, routingKey, ctag string, han
 				// the message back into the rabbit queue for
 				// another round of processing
 				if handler(msg) {
-					msg.Ack(false)
+					_ = msg.Ack(false)
 				} else {
-					msg.Nack(false, true)
+					_ = msg.Nack(false, true)
 				}
 			}
 			fmt.Println("Rabbit consumer closed - critical Error")
-			os.Exit(1)
 		}()
 	}
 	return nil

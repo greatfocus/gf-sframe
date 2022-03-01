@@ -98,7 +98,10 @@ func (m *Meta) serve() {
 	key := os.Getenv("ENV") + "server.key"
 
 	// generate self-sing key
-	GenerateSelfSignedCert(os.Getenv("SERVER_HOST"), crt, key)
+	err = GenerateSelfSignedCert(os.Getenv("SERVER_HOST"), crt, key)
+	if err != nil {
+		log.Fatal(fmt.Println(err))
+	}
 
 	m.Logger.InfoLogger.Println("Listening to port HTTP", addr)
 	log.Fatal(srv.ListenAndServeTLS(crt, key))
