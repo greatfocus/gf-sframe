@@ -30,7 +30,7 @@ func (c *Conn) connect() {
 	database := os.Getenv("DB_NAME")
 	user := os.Getenv("DB_USER")
 	password := os.Getenv("DB_PASSWORD")
-	sslmode := "prefer"
+	sslmode := "disable"
 	port, err := strconv.ParseUint(os.Getenv("DB_PORT"), 0, 64)
 	if err != nil {
 		log.Fatal(fmt.Println(err))

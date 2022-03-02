@@ -23,14 +23,14 @@ func NewLogger(serviceName string) *Logger {
 		log.Fatal(err)
 	}
 
-	debugLogger := log.New(file, "INFO: ", log.Ldate|log.Ltime|log.Lshortfile)
+	debugLogger := log.New(file, "DEBUG: ", log.Ldate|log.Ltime|log.Lshortfile)
 	infoLogger := log.New(file, "INFO: ", log.Ldate|log.Ltime|log.Lshortfile)
 	warningLogger := log.New(file, "WARNING: ", log.Ldate|log.Ltime|log.Lshortfile)
 	errorLogger := log.New(file, "ERROR: ", log.Ldate|log.Ltime|log.Lshortfile)
 
 	l := &Logger{
-		WarningLogger: infoLogger,
-		InfoLogger:    warningLogger,
+		WarningLogger: warningLogger,
+		InfoLogger:    infoLogger,
 		ErrorLogger:   errorLogger,
 		DebugLogger:   debugLogger,
 	}

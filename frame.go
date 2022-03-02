@@ -129,7 +129,7 @@ func (f *Frame) initServiceBus() *gfbus.Bus {
 
 // initServiceBroker provides broker instance
 func (f *Frame) initServiceBroker() *broker.Conn {
-	conn, err := broker.GetConn("amqp://guest:guest@localhost")
+	conn, err := broker.GetConn(os.Getenv("RABBITMQ_URL"))
 	if err != nil {
 		panic(err)
 	}
