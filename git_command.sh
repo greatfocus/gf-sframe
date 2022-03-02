@@ -9,9 +9,9 @@ git tag -l | xargs git tag -d
 
 
 
-git checkout --orphan tmp-master # create a temporary branch
+git checkout --orphan tmp-main # create a temporary branch
 git add -A  # Add all files and commit them
 git commit -m 'Add files'
-git branch -D master # Deletes the master branch
-git branch -m master # Rename the current branch to master
-git push -f origin master # Force push master branch to Git server
+git branch -D main # Deletes the main branch
+git branch -m main # Rename the current branch to main
+git push -f origin main # Force push main branch to Git server

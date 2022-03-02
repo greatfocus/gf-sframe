@@ -30,7 +30,7 @@ func (c *Conn) connect() {
 	database := os.Getenv("DB_NAME")
 	user := os.Getenv("DB_USER")
 	password := os.Getenv("DB_PASSWORD")
-	sslmode := "verify-full"
+	sslmode := "require"
 	port, err := strconv.ParseUint(os.Getenv("DB_PORT"), 0, 64)
 	if err != nil {
 		log.Fatal(fmt.Println(err))
@@ -84,8 +84,9 @@ func (c *Conn) executeSchema(db *sql.DB) {
 
 	// loop thru files to create schemas
 	for _, f := range files {
-		filepath := filepath.Clean(path + "/" + f.Name())
-		scriptFile, err := os.OpenFile(filepath, os.O_RDONLY, 0600)
+		var schema = path + "/" + f.Name()
+		schemaPath := filepath.Clean(schema)
+		scriptFile, err := os.OpenFile(schemaPath, os.O_RDONLY, 0600)
 		if err != nil {
 			log.Fatal(fmt.Println(err))
 		}
@@ -95,7 +96,7 @@ func (c *Conn) executeSchema(db *sql.DB) {
 			log.Fatal(fmt.Println(err))
 		}
 		sql := string(scriptContent)
-		log.Println("Executing schema: ", path+f.Name())
+		log.Println("Executing schema: ", schemaPath)
 		if _, err := db.Exec(sql); err != nil {
 			log.Fatal(fmt.Println(err))
 		}
