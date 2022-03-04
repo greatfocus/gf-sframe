@@ -17,6 +17,10 @@ build/**
 .env
 
 # certificates
+logs/**
+ssl/**
+*.txt
+*.log
 *.crt
 *.pem
 *.key

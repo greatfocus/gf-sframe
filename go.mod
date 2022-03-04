@@ -3,6 +3,7 @@ module github.com/greatfocus/gf-sframe
 go 1.16
 
 require (
+	github.com/google/uuid v1.3.0
 	github.com/greatfocus/gf-amqp v0.0.1-beta.4
 	github.com/greatfocus/gf-bus v0.0.1-beta.2
 	github.com/greatfocus/gf-cache v0.0.2-beta.1

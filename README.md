@@ -14,6 +14,7 @@ This is a boiler plate or frame for all the microservices
 - payload encryption
 - data at rest encryption
 - use broker to public microservice events
+- requestId limitation on timeout
 
 # Generation the ssl
 Generate private key (.key)

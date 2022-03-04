@@ -1,3 +1,5 @@
+github.com/google/uuid v1.3.0 h1:t6JiXgmwXMjEs8VusXIJk2BXHsn+wx8BZdTaoZ5fu7I=
+github.com/google/uuid v1.3.0/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+yHo=
 github.com/greatfocus/gf-amqp v0.0.1-beta.4 h1:qHy16+0IeexgW8nbRCSdl/tHLOv5FwzrKNFiBEJu//k=
 github.com/greatfocus/gf-amqp v0.0.1-beta.4/go.mod h1:1k4k1KW4CEN+PISA91eUgV3nYSG1PenlM4uA7FCzUlc=
 github.com/greatfocus/gf-bus v0.0.1-beta.2 h1:CREMYV+wKNHaLoLRcl3VkKbMROs7OouHd084ePTiOxc=

@@ -18,6 +18,8 @@ import (
 // 6. Check Permissions
 // 7. CheckAuth/WithoutAuth
 // 8. CheckRequestId
+// 9. CheckProcessTimeout
+// 10. CheckDecryption
 
 // SetHeaders // prepare header response
 func SetHeaders() Middleware {
@@ -192,19 +194,16 @@ func CheckRequestId(meta *Meta) Middleware {
 			requestId := r.Header.Get("request-id")
 			if requestId == "" {
 				w.WriteHeader(http.StatusNotAcceptable)
-				meta.Error(w, r, errors.New("Unauthorized"))
+				meta.Error(w, r, errors.New("invalid request"))
 				return
 			}
 
 			_, found := meta.Cache.Get(requestId)
-			if found {
+			if !found {
 				w.WriteHeader(http.StatusNotAcceptable)
-				meta.Error(w, r, errors.New("Unauthorized"))
+				meta.Error(w, r, errors.New("invalid request"))
 				return
 			}
-
-			// set requestId in memory
-			meta.Cache.Set(requestId, requestId, time.Duration(10))
 
 			// continue
 			h.ServeHTTP(w, r)
@@ -216,7 +215,7 @@ func CheckRequestId(meta *Meta) Middleware {
 func CheckProcessTimeout(meta *Meta) Middleware {
 	return func(h http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			ctx, cancel := context.WithTimeout(r.Context(), time.Duration(meta.timeout))
+			ctx, cancel := context.WithTimeout(r.Context(), time.Duration(meta.Timeout))
 			defer cancel()
 
 			r = r.WithContext(ctx)
@@ -232,6 +231,25 @@ func CheckProcessTimeout(meta *Meta) Middleware {
 				meta.Logger.ErrorLogger.Println([]byte(`{"error": "process timeout"}`))
 			case <-processDone:
 			}
+		})
+	}
+}
+
+// CheckDecryption validates request payload encryption
+func CheckDecryption(meta *Meta) Middleware {
+	return func(h http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+
+			// validate payload
+			_, err := meta.request(w, r)
+			if err != nil {
+				w.WriteHeader(http.StatusNotAcceptable)
+				meta.Error(w, r, err)
+				return
+			}
+
+			// continue
+			h.ServeHTTP(w, r)
 		})
 	}
 }

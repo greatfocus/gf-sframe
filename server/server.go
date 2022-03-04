@@ -10,6 +10,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -34,34 +35,50 @@ type HandlerFunc func(http.ResponseWriter, *http.Request)
 
 // Meta struct
 type Meta struct {
-	Env        string
-	Mux        *http.ServeMux
-	DB         *database.Conn
-	Cache      *cache.Cache
-	Cron       *gfcron.Cron
-	JWT        *JWT
-	Bus        *gfbus.Bus
-	Broker     *broker.Conn
-	Logger     *logger.Logger
-	publicKey  *rsa.PublicKey
-	privateKey *rsa.PrivateKey
-	timeout    uint64
+	Env              string
+	URI              string
+	Mux              *http.ServeMux
+	DB               *database.Conn
+	Cache            *cache.Cache
+	Cron             *gfcron.Cron
+	JWT              *JWT
+	Bus              *gfbus.Bus
+	Broker           *broker.Conn
+	Logger           *logger.Logger
+	clientPublicKey  *rsa.PublicKey
+	ServerPublicKey  *rsa.PublicKey
+	serverPrivateKey *rsa.PrivateKey
+	Timeout          uint64
 }
 
-// Response data
+// Response result
 type Response struct {
-	Result interface{} `json:"data,omitempty"`
+	Result string `json:"result,omitempty"`
+}
+
+// Request params
+type Request struct {
+	Params string `json:"params,omitempty"`
 }
 
 // Start the server
 func (m *Meta) Start() {
 	// Generate encryption keys
 	publicKey, privatekey := generatePKI()
-	m.publicKey = publicKey
-	m.privateKey = privatekey
+	m.ServerPublicKey = publicKey
+	m.serverPrivateKey = privatekey
+	clientPublicKey := os.Getenv("CLIENT_PUBLICKEY")
+	if clientPublicKey != "" {
+		block, _ := pem.Decode([]byte(clientPublicKey))
+		key, _ := x509.ParsePKCS1PublicKey(block.Bytes)
+		m.clientPublicKey = key
+	}
 
 	// setUploadPath creates an upload path
 	m.setUploadPath()
+
+	// set default handlers
+	m.defaultHandler()
 
 	// serve creates server instance
 	m.serve()
@@ -76,10 +93,20 @@ func (m *Meta) setUploadPath() {
 	}
 }
 
+// defaultHandler create default handlers
+func (m *Meta) defaultHandler() {
+	infoHandler := Info{}
+	infoHandler.Init(m)
+	m.Mux.Handle(m.URI+"/meta", Use(infoHandler,
+		SetHeaders(),
+		CheckLimitsRates(),
+		WithoutAuth()))
+}
+
 // serve creates server instance
 func (m *Meta) serve() {
 	timeout, err := strconv.ParseUint(os.Getenv("SERVER_TIMEOUT"), 0, 64)
-	m.timeout = timeout
+	m.Timeout = timeout
 	if err != nil {
 		log.Fatal(fmt.Println(err))
 	}
@@ -94,8 +121,8 @@ func (m *Meta) serve() {
 	}
 
 	// create server connection
-	crt := os.Getenv("APP_PATH") + "/server.crt"
-	key := os.Getenv("APP_PATH") + "/server.key"
+	crt := os.Getenv("APP_PATH") + "ssl" + "/server.crt"
+	key := os.Getenv("APP_PATH") + "ssl" + "/server.key"
 
 	// generate self-sing key
 	err = GenerateSelfSignedCert(os.Getenv("SERVER_HOST"), crt, key)
@@ -110,11 +137,11 @@ func (m *Meta) serve() {
 // Success returns object as json
 func (m *Meta) Success(w http.ResponseWriter, r *http.Request, data interface{}) {
 	if data != nil {
-		m.response(w, r, data, "success", *m.publicKey)
+		m.response(w, r, data, "success")
 		return
 	}
 	w.WriteHeader(http.StatusBadRequest)
-	m.response(w, r, nil, "success", *m.publicKey)
+	m.response(w, r, nil, "success")
 }
 
 // Error returns error as json
@@ -122,27 +149,52 @@ func (m *Meta) Error(w http.ResponseWriter, r *http.Request, err error) {
 	if err != nil {
 		m.response(w, r, struct {
 			Error string `json:"error"`
-		}{Error: err.Error()}, "error", *m.publicKey)
+		}{Error: err.Error()}, "error")
 		return
 	}
 	w.WriteHeader(http.StatusBadRequest)
-	m.response(w, r, nil, "error", *m.publicKey)
+	m.response(w, r, nil, "error")
+}
+
+// request returns payload
+func (m *Meta) request(w http.ResponseWriter, r *http.Request) (string, error) {
+	body, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		derr := errors.New("invalid payload request")
+		log.Printf("Error: %v\n", err)
+		w.WriteHeader(http.StatusBadRequest)
+		m.Error(w, r, derr)
+		return "", err
+	}
+	request := Request{}
+	err = json.Unmarshal(body, &request)
+	if err != nil {
+		derr := errors.New("invalid payload request")
+		log.Printf("Error: %v\n", err)
+		w.WriteHeader(http.StatusBadRequest)
+		m.Error(w, r, derr)
+		return "", err
+	}
+
+	req := serverDecrypt(request.Params, m.serverPrivateKey)
+	return req, nil
 }
 
 // response returns payload
-func (m *Meta) response(w http.ResponseWriter, r *http.Request, data interface{}, message string, publicKey rsa.PublicKey) {
+func (m *Meta) response(w http.ResponseWriter, r *http.Request, data interface{}, message string) {
 	out, _ := json.Marshal(data)
 	res := Response{
-		Result: encrypt(string(out), publicKey),
+		Result: serverEncrypt(string(out), m.clientPublicKey),
 	}
 	_ = json.NewEncoder(w).Encode(res)
 }
 
-func (m *Meta) Decrypt(cipherText string) string {
+// decrypt payload
+func serverDecrypt(cipherText string, key *rsa.PrivateKey) string {
 	ct, _ := base64.StdEncoding.DecodeString(cipherText)
 	label := []byte("OAEP Encrypted")
 	rng := rand.Reader
-	plaintext, err := rsa.DecryptOAEP(sha256.New(), rng, m.privateKey, ct, label)
+	plaintext, err := rsa.DecryptOAEP(sha256.New(), rng, key, ct, label)
 	checkError(err)
 	fmt.Println("Plaintext:", string(plaintext))
 	return string(plaintext)
@@ -161,10 +213,10 @@ func generatePKI() (*rsa.PublicKey, *rsa.PrivateKey) {
 }
 
 // encrypt payload
-func encrypt(secretMessage string, key rsa.PublicKey) string {
+func serverEncrypt(secretMessage string, key *rsa.PublicKey) string {
 	label := []byte("OAEP Encrypted")
 	rng := rand.Reader
-	ciphertext, err := rsa.EncryptOAEP(sha256.New(), rng, &key, []byte(secretMessage), label)
+	ciphertext, err := rsa.EncryptOAEP(sha256.New(), rng, key, []byte(secretMessage), label)
 	checkError(err)
 	return base64.StdEncoding.EncodeToString(ciphertext)
 }

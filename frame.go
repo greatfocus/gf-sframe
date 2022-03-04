@@ -24,7 +24,7 @@ type Frame struct {
 }
 
 // NewFrame get new instance of frame
-func NewFrame(serviceName string) *Frame {
+func NewFrame(serviceName, URI string) *Frame {
 	// Load environment variables
 	env := os.Getenv("ENV")
 	if env == "" || os.Getenv("ENV") == "dev" {
@@ -37,6 +37,7 @@ func NewFrame(serviceName string) *Frame {
 	// prepare impl
 	impl := Impl{
 		Service: serviceName,
+		URI:     URI,
 		Env:     env,
 	}
 	var f = &Frame{env: impl.Env}
@@ -66,10 +67,11 @@ func (f *Frame) init(impl *Impl) *server.Meta {
 	broker := f.initServiceBroker()
 
 	// init creates instance of logger
-	logger := f.initLogger(impl.Service)
+	logger := f.initLogger(impl.Service, cron)
 
 	return &server.Meta{
 		Env:    impl.Env,
+		URI:    impl.URI,
 		Cron:   cron,
 		Cache:  cache,
 		DB:     db,
@@ -137,7 +139,7 @@ func (f *Frame) initServiceBroker() *broker.Conn {
 }
 
 // initServiceBus provides bus instance
-func (f *Frame) initLogger(serviceName string) *logger.Logger {
+func (f *Frame) initLogger(serviceName string, cron *gfcron.Cron) *logger.Logger {
 	// create service bus
-	return logger.NewLogger(serviceName)
+	return logger.NewLogger(serviceName, cron)
 }
