@@ -48,6 +48,6 @@ func (i *Info) getInfo(w http.ResponseWriter, r *http.Request) {
 		PublicKey: string(publicKeyBytes),
 		RequestID: uuid,
 	}
-	i.meta.Cache.Set(uuid, uuid, time.Duration(i.meta.Timeout))
+	i.meta.Cache.Set(uuid, uuid, time.Duration(1))
 	i.meta.Success(w, r, res)
 }

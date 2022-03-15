@@ -19,6 +19,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"time"
 
@@ -58,7 +59,13 @@ type Response struct {
 
 // Request params
 type Request struct {
-	Params string `json:"params,omitempty"`
+	Data string `json:"data,omitempty"`
+}
+
+// Params
+type Params struct {
+	ID    string `json:"id,omitempty"`
+	Param string `json:"param,omitempty"`
 }
 
 // Start the server
@@ -157,47 +164,94 @@ func (m *Meta) Error(w http.ResponseWriter, r *http.Request, err error) {
 }
 
 // request returns payload
-func (m *Meta) request(w http.ResponseWriter, r *http.Request) (string, error) {
+func (m *Meta) request(w http.ResponseWriter, r *http.Request) error {
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		derr := errors.New("invalid payload request")
-		log.Printf("Error: %v\n", err)
 		w.WriteHeader(http.StatusBadRequest)
 		m.Error(w, r, derr)
-		return "", err
+		return err
 	}
 	request := Request{}
 	err = json.Unmarshal(body, &request)
 	if err != nil {
 		derr := errors.New("invalid payload request")
-		log.Printf("Error: %v\n", err)
 		w.WriteHeader(http.StatusBadRequest)
 		m.Error(w, r, derr)
-		return "", err
+		return err
 	}
 
-	req := serverDecrypt(request.Params, m.serverPrivateKey)
-	return req, nil
+	req, err := serverDecrypt(request.Data, m.serverPrivateKey)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		m.Error(w, r, err)
+		return err
+	}
+	err = m.checkRequestId(req)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		m.Error(w, r, err)
+		return err
+	}
+	return nil
+}
+
+// CheckRequestId validates requestID
+func (m *Meta) checkRequestId(p Params) error {
+	if p.ID == "" {
+		return errors.New("invalid request")
+	}
+
+	_, found := m.Cache.Get(p.ID)
+	if !found {
+		return errors.New("duplicate request")
+	}
+
+	m.Cache.Set(p.ID, p.Param, time.Duration(m.Timeout))
+	return nil
 }
 
 // response returns payload
 func (m *Meta) response(w http.ResponseWriter, r *http.Request, data interface{}, message string) {
 	out, _ := json.Marshal(data)
+	result, err := serverEncrypt(string(out), m.clientPublicKey)
+	if err != nil {
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		m.Error(w, r, err)
+	}
 	res := Response{
-		Result: serverEncrypt(string(out), m.clientPublicKey),
+		Result: result,
 	}
 	_ = json.NewEncoder(w).Encode(res)
 }
 
 // decrypt payload
-func serverDecrypt(cipherText string, key *rsa.PrivateKey) string {
+func serverDecrypt(cipherText string, key *rsa.PrivateKey) (Params, error) {
+	params := Params{}
 	ct, _ := base64.StdEncoding.DecodeString(cipherText)
 	label := []byte("OAEP Encrypted")
 	rng := rand.Reader
 	plaintext, err := rsa.DecryptOAEP(sha256.New(), rng, key, ct, label)
-	checkError(err)
-	fmt.Println("Plaintext:", string(plaintext))
-	return string(plaintext)
+	if err != nil {
+		derr := errors.New("invalid payload request")
+		return params, derr
+	}
+
+	// validate special characters
+	var data = string(plaintext)
+	var payload = regexp.MustCompile(`^[a-zA-Z0-9_]*$`)
+	var isValid = payload.MatchString(data)
+	if !isValid {
+		derr := errors.New("invalid payload request")
+		return params, derr
+	}
+
+	err = json.Unmarshal(plaintext, &params)
+	if err != nil {
+		derr := errors.New("invalid payload request")
+		return params, derr
+	}
+	return params, nil
 }
 
 // generatePKI provides encryption keys
@@ -213,19 +267,15 @@ func generatePKI() (*rsa.PublicKey, *rsa.PrivateKey) {
 }
 
 // encrypt payload
-func serverEncrypt(secretMessage string, key *rsa.PublicKey) string {
+func serverEncrypt(secretMessage string, key *rsa.PublicKey) (string, error) {
 	label := []byte("OAEP Encrypted")
 	rng := rand.Reader
 	ciphertext, err := rsa.EncryptOAEP(sha256.New(), rng, key, []byte(secretMessage), label)
-	checkError(err)
-	return base64.StdEncoding.EncodeToString(ciphertext)
-}
-
-// checkError validate error
-func checkError(e error) {
-	if e != nil {
-		log.Printf("Decryption failed : %s", e)
+	if err != nil {
+		derr := errors.New("invalid payload request")
+		return "", derr
 	}
+	return base64.StdEncoding.EncodeToString(ciphertext), nil
 }
 
 // GenerateSelfSignedCert creates a self-signed certificate and key for the given host.

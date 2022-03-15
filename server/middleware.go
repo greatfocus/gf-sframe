@@ -17,9 +17,8 @@ import (
 // 5. preflight
 // 6. Check Permissions
 // 7. CheckAuth/WithoutAuth
-// 8. CheckRequestId
-// 9. CheckProcessTimeout
-// 10. CheckDecryption
+// 8. CheckProcessTimeout
+// 9. CheckDecryption
 
 // SetHeaders // prepare header response
 func SetHeaders() Middleware {
@@ -185,32 +184,6 @@ func WithoutAuth() Middleware {
 	}
 }
 
-// CheckAuth validates request for jwt header
-func CheckRequestId(meta *Meta) Middleware {
-	return func(h http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-
-			// validate jwt
-			requestId := r.Header.Get("request-id")
-			if requestId == "" {
-				w.WriteHeader(http.StatusNotAcceptable)
-				meta.Error(w, r, errors.New("invalid request"))
-				return
-			}
-
-			_, found := meta.Cache.Get(requestId)
-			if !found {
-				w.WriteHeader(http.StatusNotAcceptable)
-				meta.Error(w, r, errors.New("invalid request"))
-				return
-			}
-
-			// continue
-			h.ServeHTTP(w, r)
-		})
-	}
-}
-
 // CheckProcessTimeout put a time limit for the handler process duration and will give an error response if timeout
 func CheckProcessTimeout(meta *Meta) Middleware {
 	return func(h http.Handler) http.Handler {
@@ -241,7 +214,7 @@ func CheckDecryption(meta *Meta) Middleware {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 
 			// validate payload
-			_, err := meta.request(w, r)
+			err := meta.request(w, r)
 			if err != nil {
 				w.WriteHeader(http.StatusNotAcceptable)
 				meta.Error(w, r, err)

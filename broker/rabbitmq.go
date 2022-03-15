@@ -1,8 +1,6 @@
 package broker
 
 import (
-	"fmt"
-
 	amqp "github.com/greatfocus/gf-amqp"
 )
 
@@ -77,7 +75,6 @@ func (conn Conn) StartConsumer(exchange, queueName, routingKey, ctag string, han
 
 	// create a goroutine for the number of concurrent threads requested
 	for i := 0; i < concurrency; i++ {
-		fmt.Printf("Processing messages on thread %v...\n", i)
 		go func() {
 			for msg := range msgs {
 				// if tha handler returns true then ACK, else NACK
@@ -89,7 +86,6 @@ func (conn Conn) StartConsumer(exchange, queueName, routingKey, ctag string, han
 					_ = msg.Nack(false, true)
 				}
 			}
-			fmt.Println("Rabbit consumer closed - critical Error")
 		}()
 	}
 	return nil
