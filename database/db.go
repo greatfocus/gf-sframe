@@ -31,7 +31,7 @@ func (c *Conn) connect() {
 	user := os.Getenv("DB_USER")
 	password := os.Getenv("DB_PASSWORD")
 	sslmode := "verify-full"
-	sslrootcert := os.Getenv("DB_ROOT+CA")
+	sslrootcert := os.Getenv("DB_ROOT_CA")
 	sslkey := os.Getenv("DB_SSL_KEY")
 	sslcert := os.Getenv("DB_SSL_CERT")
 
