@@ -34,66 +34,20 @@ Generation of self-signed(x509) public key (PEM-encodings .pem|.crt) based on th
     openssl req -new -x509 -sha256 -key server.key -out server.crt -days 3650
 
 # Generation the Postgres ssl
-    # Create CA private key
-    openssl genrsa -des3 -out root.key 4096
-    #Remove a passphrase
-    openssl rsa -in root.key -out root.key
+    openssl req -new -x509 -days 365 -nodes -out ca.crt -keyout ca.key -subj "/CN=root-ca"
 
-    # Create a root Certificate Authority (CA)
-    openssl \
-        req -new -x509 \
-        -days 365 \
-        -subj "/CN=qa.localhost.com" \
-        -key root.key \
-        -out root.crt
+    openssl req -new -nodes -out server.csr -keyout server.key -subj "/CN=192.168.49.2"
 
-    # Create server key
-    openssl genrsa -des3 -out server.key 4096
-    #Remove a passphrase
-    openssl rsa -in server.key -out server.key
+    openssl x509 -req -in server.csr -days 365 -CA ca.crt -CAkey ca.key -CAcreateserial -out server.crt
 
-    # Create a root certificate signing request
-    openssl \
-        req -new \
-        -key server.key \
-        -subj "/CN=qa.localhost.com" \
-        -text \
-        -out server.csr
-
-    # Create server certificate
-    openssl \
-        x509 -req \
-        -in server.csr \
-        -text \
-        -days 365 \
-        -CA root.crt \
-        -CAkey root.key \
-        -CAcreateserial \
-        -out server.crt
+    rm server.csr
 
 
-    # Create client key
-    openssl genrsa -out client.key 4096
-    #Remove a passphrase
-    openssl rsa -in client.key -out client.key
 
-    # Create client certificate signing request
-    openssl \
-        req -new \
-        -key client.key \
-        -subj "/CN=qa.localhost.com" \
-        -out client.csr
+    openssl req -new -nodes -out client.csr -keyout client.key -subj "/CN=respect"
 
-    # Create client certificate
-    openssl \
-        x509 -req \
-        -in client.csr \
-        -CA root.crt \
-        -CAkey root.key \
-        -CAcreateserial \
-        -days 365 \
-        -text \
-        -out client.crt
-    
-    #Copy the cert
-    scp *.crt docker@IP:<LOCATION>
+    openssl x509 -req -in client.csr -days 365 -CA ca.crt -CAkey ca.key -CAcreateserial -out client.crt
+
+    rm client.csr
+
+    openssl base64 -in ca.crt -out ca.txt

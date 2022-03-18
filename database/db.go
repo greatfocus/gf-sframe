@@ -64,6 +64,13 @@ func (c *Conn) connect() {
 	if err != nil {
 		log.Fatal(fmt.Println(err))
 	}
+
+	// confirm connection
+	err = conn.Ping()
+	if err != nil {
+		log.Fatal(fmt.Println(err))
+	}
+
 	conn.SetConnMaxLifetime(maxLifetime)
 	conn.SetMaxIdleConns(int(maxIdleConns))
 	conn.SetMaxOpenConns(int(maxOpenConns))
@@ -123,26 +130,72 @@ func (c *Conn) RebuildIndexes(db *sql.DB, dbname string) {
 }
 
 // Insert method make a single row query to the databases
-func (c *Conn) Insert(ctx context.Context, query string, args ...interface{}) *sql.Row {
-	return c.conn.QueryRowContext(ctx, query, args...)
+func (c *Conn) Insert(ctx context.Context, query string, args ...interface{}) (int64, bool) {
+	stmt, err := c.conn.Prepare(query)
+	if err != nil {
+		return 0, false
+	}
+	defer func() {
+		_ = stmt.Close()
+	}()
+	res, err := stmt.ExecContext(ctx, args...)
+	if err != nil {
+		return 0, false
+	}
+	// Get the new generated ID
+	id, err := res.LastInsertId()
+	if err != nil {
+		return 0, false
+	}
+	// Return the ID.
+	return id, true
 }
 
 // Query method make a resultset rows query to the databases
 func (c *Conn) Query(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
-	return c.conn.QueryContext(ctx, query, args...)
+	rows, err := c.conn.QueryContext(ctx, query, args...)
+	defer func() {
+		_ = rows.Close()
+	}()
+	return rows, err
 }
 
 // Select method make a single row query to the databases
-func (c *Conn) Select(ctx context.Context, query string, args ...interface{}) *sql.Row {
-	return c.conn.QueryRowContext(ctx, query, args...)
+func (c *Conn) Select(ctx context.Context, query string, args ...interface{}) (*sql.Row, error) {
+	rows := c.conn.QueryRowContext(ctx, query, args...)
+	return rows, rows.Err()
 }
 
 // Update method executes update database changes to the databases
-func (c *Conn) Update(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
-	return c.conn.ExecContext(ctx, query, args...)
+func (c *Conn) Update(ctx context.Context, query string, args ...interface{}) bool {
+	return updateOrDelete(c, query, ctx, args)
 }
 
 // Delete method executes delete database changes to the databases
-func (c *Conn) Delete(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
-	return c.conn.ExecContext(ctx, query, args...)
+func (c *Conn) Delete(ctx context.Context, query string, args ...interface{}) bool {
+	return updateOrDelete(c, query, ctx, args)
+}
+
+// update or delete records
+func updateOrDelete(c *Conn, query string, ctx context.Context, args []interface{}) bool {
+	stmt, err := c.conn.Prepare(query)
+	if err != nil {
+		return false
+	}
+	defer func() {
+		_ = stmt.Close()
+	}()
+	res, err := stmt.ExecContext(ctx, args...)
+	if err != nil {
+		return false
+	}
+
+	count, err := res.RowsAffected()
+	if err != nil {
+		return false
+	}
+	if count > 1 {
+		return true
+	}
+	return false
 }
