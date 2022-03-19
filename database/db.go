@@ -153,7 +153,14 @@ func (c *Conn) Insert(ctx context.Context, query string, args ...interface{}) (i
 
 // Query method make a resultset rows query to the databases
 func (c *Conn) Query(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
-	rows, err := c.conn.QueryContext(ctx, query, args...)
+	stmt, err := c.conn.Prepare(query)
+	if err != nil {
+		return &sql.Rows{}, err
+	}
+	defer func() {
+		_ = stmt.Close()
+	}()
+	rows, err := stmt.QueryContext(ctx, args...)
 	defer func() {
 		_ = rows.Close()
 	}()
@@ -161,9 +168,16 @@ func (c *Conn) Query(ctx context.Context, query string, args ...interface{}) (*s
 }
 
 // Select method make a single row query to the databases
-func (c *Conn) Select(ctx context.Context, query string, args ...interface{}) (*sql.Row, error) {
-	rows := c.conn.QueryRowContext(ctx, query, args...)
-	return rows, rows.Err()
+func (c *Conn) Select(ctx context.Context, query string, args ...interface{}) *sql.Row {
+	stmt, err := c.conn.Prepare(query)
+	if err != nil {
+		return &sql.Row{}
+	}
+	defer func() {
+		_ = stmt.Close()
+	}()
+	rows := stmt.QueryRowContext(ctx, args...)
+	return rows
 }
 
 // Update method executes update database changes to the databases
