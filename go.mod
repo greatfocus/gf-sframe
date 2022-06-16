@@ -1,6 +1,6 @@
 module github.com/greatfocus/gf-sframe
 
-go 1.16
+go 1.18
 
 require (
 	github.com/google/uuid v1.3.0

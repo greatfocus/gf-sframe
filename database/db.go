@@ -30,8 +30,7 @@ func (c *Conn) connect() {
 	database := os.Getenv("DB_NAME")
 	user := os.Getenv("DB_USER")
 	password := os.Getenv("DB_PASSWORD")
-	sslmode := "verify-full"
-	sslrootcert := os.Getenv("DB_ROOT_CA")
+	sslmode := "require"
 	sslkey := os.Getenv("DB_SSL_KEY")
 	sslcert := os.Getenv("DB_SSL_CERT")
 
@@ -58,8 +57,8 @@ func (c *Conn) connect() {
 
 	// create database connection
 	psqlInfo := fmt.Sprintf(
-		"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s sslrootcert=%s sslkey=%s sslcert=%s",
-		host, port, user, password, database, sslmode, sslrootcert, sslkey, sslcert)
+		"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s sslkey=%s sslcert=%s",
+		host, port, user, password, database, sslmode, sslkey, sslcert)
 	conn, err := sql.Open("postgres", psqlInfo)
 	if err != nil {
 		log.Fatal(fmt.Println(err))
