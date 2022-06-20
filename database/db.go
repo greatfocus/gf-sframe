@@ -3,6 +3,7 @@ package database
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -23,6 +24,41 @@ func (c *Conn) Init() {
 }
 
 // Connect method make a database connection
+func (c *Conn) sslCertificate() (cert, key, ca string) {
+	var root string
+	key = c.createSSLCert("client.key", os.Getenv("DB_SSL_KEY"))
+	cert = c.createSSLCert("client.crt", os.Getenv("DB_SSL_CERT"))
+	sslrootcert := os.Getenv("DB_ROOT_CA")
+	if sslrootcert != "" {
+		root = c.createSSLCert("ca.crt", os.Getenv("DB_ROOT_CA"))
+	}
+	return key, cert, root
+}
+
+// createSSLCert makes cert in image
+func (c *Conn) createSSLCert(filename string, content string) string {
+	var path = os.Getenv("APP_PATH") + "/" + filename
+	path = filepath.Clean(path)
+	_, err := os.Open(path)
+	if errors.Is(err, os.ErrNotExist) {
+		file, err := os.Create(path)
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer func() {
+			_ = file.Close()
+		}()
+		err = os.Chmod(path, 0600)
+		if err != nil {
+			log.Fatal(err)
+		}
+		file.WriteString(content)
+	}
+
+	return path
+}
+
+// Connect method make a database connection
 func (c *Conn) connect() {
 	// initialize variables rom config
 	log.Println("Preparing Database configuration")
@@ -33,6 +69,12 @@ func (c *Conn) connect() {
 	sslmode := "require"
 	sslkey := os.Getenv("DB_SSL_KEY")
 	sslcert := os.Getenv("DB_SSL_CERT")
+	var sslkeyPath, sslcertPath, sslcaPath string
+
+	// prepare ssl connection files
+	if sslkey != "" && sslcert != "" {
+		sslkeyPath, sslcertPath, sslcaPath = c.sslCertificate()
+	}
 
 	port, err := strconv.ParseUint(os.Getenv("DB_PORT"), 0, 64)
 	if err != nil {
@@ -56,9 +98,18 @@ func (c *Conn) connect() {
 	}
 
 	// create database connection
-	psqlInfo := fmt.Sprintf(
-		"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s sslkey=%s sslcert=%s",
-		host, port, user, password, database, sslmode, sslkey, sslcert)
+	var psqlInfo string
+	if sslcaPath != "" {
+		sslmode = "verify-full"
+		psqlInfo = fmt.Sprintf(
+			"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s sslrootcert=%s sslkey=%s sslcert=%s",
+			host, port, user, password, database, sslmode, sslcaPath, sslkeyPath, sslcertPath)
+	} else {
+		psqlInfo = fmt.Sprintf(
+			"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s sslkey=%s sslcert=%s",
+			host, port, user, password, database, sslmode, sslkeyPath, sslcertPath)
+	}
+
 	conn, err := sql.Open("postgres", psqlInfo)
 	if err != nil {
 		log.Fatal(fmt.Println(err))
