@@ -3,6 +3,7 @@ package database
 import (
 	"context"
 	"database/sql"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"io/ioutil"
@@ -52,7 +53,12 @@ func (c *Conn) createSSLCert(filename string, content string) string {
 		if err != nil {
 			log.Fatal(err)
 		}
-		file.WriteString(content)
+
+		cnt, err := base64.StdEncoding.DecodeString(content)
+		if err != nil {
+			file.WriteString(content)
+		}
+		file.WriteString(string(cnt))
 	}
 
 	return path
