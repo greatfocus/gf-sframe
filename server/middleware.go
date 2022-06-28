@@ -188,7 +188,7 @@ func WithoutAuth() Middleware {
 func CheckProcessTimeout(meta *Meta) Middleware {
 	return func(h http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			ctx, cancel := context.WithTimeout(r.Context(), time.Duration(meta.Timeout))
+			ctx, cancel := context.WithTimeout(r.Context(), time.Duration(meta.Timeout)*time.Second)
 			defer cancel()
 
 			r = r.WithContext(ctx)
@@ -214,7 +214,7 @@ func CheckDecryption(meta *Meta) Middleware {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 
 			// validate payload
-			err := meta.request(w, r)
+			_, err := meta.Request(w, r)
 			if err != nil {
 				w.WriteHeader(http.StatusNotAcceptable)
 				meta.Error(w, r, err)

@@ -64,8 +64,8 @@ type Request struct {
 
 // Params
 type Params struct {
-	ID    string `json:"id,omitempty"`
-	Param string `json:"param,omitempty"`
+	ID     string      `json:"id,omitempty"`
+	Params interface{} `json:"params,omitempty"`
 }
 
 // Start the server
@@ -164,36 +164,49 @@ func (m *Meta) Error(w http.ResponseWriter, r *http.Request, err error) {
 }
 
 // request returns payload
-func (m *Meta) request(w http.ResponseWriter, r *http.Request) error {
+func (m *Meta) Request(w http.ResponseWriter, r *http.Request) (interface{}, error) {
+	req := Params{}
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		derr := errors.New("invalid payload request")
 		w.WriteHeader(http.StatusBadRequest)
 		m.Error(w, r, derr)
-		return err
-	}
-	request := Request{}
-	err = json.Unmarshal(body, &request)
-	if err != nil {
-		derr := errors.New("invalid payload request")
-		w.WriteHeader(http.StatusBadRequest)
-		m.Error(w, r, derr)
-		return err
+		return nil, err
 	}
 
-	req, err := serverDecrypt(request.Data, m.serverPrivateKey)
-	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		m.Error(w, r, err)
-		return err
+	if m.clientPublicKey != nil {
+		request := Request{}
+		err = json.Unmarshal(body, &request)
+		if err != nil {
+			derr := errors.New("invalid payload request")
+			w.WriteHeader(http.StatusBadRequest)
+			m.Error(w, r, derr)
+			return nil, err
+		}
+
+		req, err = serverDecrypt(request.Data, m.serverPrivateKey)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			m.Error(w, r, err)
+			return nil, err
+		}
+	} else {
+		err = json.Unmarshal(body, &req)
+		if err != nil {
+			derr := errors.New("invalid payload request")
+			w.WriteHeader(http.StatusBadRequest)
+			m.Error(w, r, derr)
+			return nil, err
+		}
 	}
+
 	err = m.checkRequestId(req)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		m.Error(w, r, err)
-		return err
+		return nil, err
 	}
-	return nil
+	return req.Params, nil
 }
 
 // CheckRequestId validates requestID
@@ -203,26 +216,34 @@ func (m *Meta) checkRequestId(p Params) error {
 	}
 
 	_, found := m.Cache.Get(p.ID)
-	if !found {
+	if found {
 		return errors.New("duplicate request")
 	}
 
-	m.Cache.Set(p.ID, p.Param, time.Duration(m.Timeout))
+	m.Cache.Set(p.ID, p.Params, time.Duration(m.Timeout)*time.Second)
 	return nil
 }
 
 // response returns payload
 func (m *Meta) response(w http.ResponseWriter, r *http.Request, data interface{}, message string) {
 	out, _ := json.Marshal(data)
-	result, err := serverEncrypt(string(out), m.clientPublicKey)
-	if err != nil {
-		w.WriteHeader(http.StatusUnprocessableEntity)
-		m.Error(w, r, err)
+	if m.clientPublicKey != nil {
+		result, err := serverEncrypt(string(out), m.clientPublicKey)
+		if err != nil {
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			m.Error(w, r, err)
+		}
+		res := Response{
+			Result: result,
+		}
+		_ = json.NewEncoder(w).Encode(res)
+	} else {
+		res := Response{
+			Result: string(out),
+		}
+		_ = json.NewEncoder(w).Encode(res)
 	}
-	res := Response{
-		Result: result,
-	}
-	_ = json.NewEncoder(w).Encode(res)
+
 }
 
 // decrypt payload
