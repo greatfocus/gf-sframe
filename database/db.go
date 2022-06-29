@@ -198,13 +198,11 @@ func (c *Conn) Insert(ctx context.Context, query string, args ...interface{}) (i
 	if err != nil {
 		return 0, false
 	}
-	// Get the new generated ID
-	id, err := res.LastInsertId()
-	if err != nil {
+	rows, err := res.RowsAffected()
+	if err != nil || rows < 1 {
 		return 0, false
 	}
-	// Return the ID.
-	return id, true
+	return rows, true
 }
 
 // Query method make a resultset rows query to the databases
@@ -261,11 +259,8 @@ func updateOrDelete(c *Conn, query string, ctx context.Context, args []interface
 	}
 
 	count, err := res.RowsAffected()
-	if err != nil {
+	if err != nil || count < 1 {
 		return false
 	}
-	if count > 1 {
-		return true
-	}
-	return false
+	return true
 }
