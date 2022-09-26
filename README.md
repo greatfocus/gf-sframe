@@ -51,3 +51,5 @@ Generation of self-signed(x509) public key (PEM-encodings .pem|.crt) based on th
     rm client.csr
 
     openssl base64 -in ca.crt -out ca.txt
+
+    scp ca.crt   docker@IP:/home/docker

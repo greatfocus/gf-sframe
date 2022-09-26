@@ -187,7 +187,7 @@ func (c *Conn) RebuildIndexes(db *sql.DB, dbname string) {
 
 // Insert method make a single row query to the databases
 func (c *Conn) Insert(ctx context.Context, query string, args ...interface{}) (int64, bool) {
-	stmt, err := c.conn.Prepare(query)
+	stmt, err := c.conn.PrepareContext(ctx, query)
 	if err != nil {
 		return 0, false
 	}
@@ -207,14 +207,7 @@ func (c *Conn) Insert(ctx context.Context, query string, args ...interface{}) (i
 
 // Query method make a resultset rows query to the databases
 func (c *Conn) Query(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
-	stmt, err := c.conn.Prepare(query)
-	if err != nil {
-		return &sql.Rows{}, err
-	}
-	defer func() {
-		_ = stmt.Close()
-	}()
-	rows, err := stmt.QueryContext(ctx, args...)
+	rows, err := c.conn.QueryContext(ctx, query, args...)
 	defer func() {
 		_ = rows.Close()
 	}()
@@ -223,7 +216,7 @@ func (c *Conn) Query(ctx context.Context, query string, args ...interface{}) (*s
 
 // Select method make a single row query to the databases
 func (c *Conn) Select(ctx context.Context, query string, args ...interface{}) *sql.Row {
-	stmt, err := c.conn.Prepare(query)
+	stmt, err := c.conn.PrepareContext(ctx, query)
 	if err != nil {
 		return &sql.Row{}
 	}
@@ -246,7 +239,7 @@ func (c *Conn) Delete(ctx context.Context, query string, args ...interface{}) bo
 
 // update or delete records
 func updateOrDelete(c *Conn, query string, ctx context.Context, args []interface{}) bool {
-	stmt, err := c.conn.Prepare(query)
+	stmt, err := c.conn.PrepareContext(ctx, query)
 	if err != nil {
 		return false
 	}
