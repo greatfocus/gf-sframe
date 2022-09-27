@@ -93,11 +93,9 @@ func (m *Meta) Start() {
 
 // setUploadPath creates an upload path
 func (m *Meta) setUploadPath() {
-	uploadPath := os.Getenv("UPLOAD_PATH")
-	if uploadPath != "" {
-		fs := http.FileServer(http.Dir(uploadPath + "/"))
-		m.Mux.Handle("/file/", http.StripPrefix("/file/", fs))
-	}
+	fs := http.FileServer(http.Dir("./upload"))
+	fileLoc := "/" + m.URI + "/resource"
+	m.Mux.Handle(fileLoc+"/", http.StripPrefix(fileLoc, fs))
 }
 
 // defaultHandler create default handlers
