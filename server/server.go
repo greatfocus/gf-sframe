@@ -126,8 +126,8 @@ func (m *Meta) serve() {
 	}
 
 	// create server connection
-	crt := os.Getenv("APP_PATH") + "ssl" + "/server.crt"
-	key := os.Getenv("APP_PATH") + "ssl" + "/server.key"
+	crt := os.Getenv("APP_PATH") + "/ssl/server.crt"
+	key := os.Getenv("APP_PATH") + "/ssl/server.key"
 
 	// generate self-sing key
 	err = GenerateSelfSignedCert(os.Getenv("SERVER_HOST"), crt, key)
