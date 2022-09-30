@@ -134,9 +134,12 @@ func (m *Meta) serve() {
 	// }
 
 	// Get key certificate
-	crt, key := GetServerCertificate()
 	m.Logger.InfoLogger.Println("Listening to port HTTP", addr)
-	log.Fatal(srv.ListenAndServeTLS(crt, key))
+	crt, key := GetServerCertificate()
+	if crt != "" && key != "" {
+		log.Fatal(srv.ListenAndServeTLS(crt, key))
+	}
+	log.Fatal(srv.ListenAndServe())
 }
 
 // Success returns object as json
