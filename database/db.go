@@ -25,20 +25,20 @@ func (c *Conn) Init() {
 }
 
 // Connect method make a database connection
-func (c *Conn) sslCertificate() (cert, key, ca string) {
+func (c *Conn) getCertificate() (cert, key, ca string) {
 	var root string
-	key = c.createSSLCert("client.key", os.Getenv("DB_SSL_KEY"))
-	cert = c.createSSLCert("client.crt", os.Getenv("DB_SSL_CERT"))
+	key = CreateSSLCert("postgresql-client.key", os.Getenv("DB_SSL_KEY"))
+	cert = CreateSSLCert("postgresql-client.crt", os.Getenv("DB_SSL_CERT"))
 	sslrootcert := os.Getenv("DB_ROOT_CA")
 	if sslrootcert != "" {
-		root = c.createSSLCert("ca.crt", os.Getenv("DB_ROOT_CA"))
+		root = CreateSSLCert("postgresql-ca.crt", os.Getenv("DB_ROOT_CA"))
 	}
 	return key, cert, root
 }
 
-// createSSLCert makes cert in image
-func (c *Conn) createSSLCert(filename string, content string) string {
-	var path = os.Getenv("APP_PATH") + "/" + filename
+// CreateSSLCert makes cert in image
+func CreateSSLCert(filename string, content string) string {
+	var path = os.Getenv("APP_PATH") + "/ssl/" + filename
 	path = filepath.Clean(path)
 	_, err := os.Open(path)
 	if errors.Is(err, os.ErrNotExist) {
@@ -79,7 +79,7 @@ func (c *Conn) connect() {
 
 	// prepare ssl connection files
 	if sslkey != "" && sslcert != "" {
-		sslkeyPath, sslcertPath, sslcaPath = c.sslCertificate()
+		sslkeyPath, sslcertPath, sslcaPath = c.getCertificate()
 	}
 
 	port, err := strconv.ParseUint(os.Getenv("DB_PORT"), 0, 64)

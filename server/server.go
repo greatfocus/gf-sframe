@@ -125,16 +125,16 @@ func (m *Meta) serve() {
 		Handler:        m.Mux,
 	}
 
-	// create server connection
-	crt := os.Getenv("APP_PATH") + "/ssl/server.crt"
-	key := os.Getenv("APP_PATH") + "/ssl/server.key"
-
 	// generate self-sing key
-	err = GenerateSelfSignedCert(os.Getenv("SERVER_HOST"), crt, key)
-	if err != nil {
-		log.Fatal(fmt.Println(err))
-	}
+	// crt := os.Getenv("APP_PATH") + "/ssl/api-server.crt"
+	// key := os.Getenv("APP_PATH") + "/ssl/api-server.key"
+	// err = GenerateSelfSignedCert(crt, key)
+	// if err != nil {
+	// 	log.Fatal(fmt.Println(err))
+	// }
 
+	// Get key certificate
+	crt, key := GetServerCertificate()
 	m.Logger.InfoLogger.Println("Listening to port HTTP", addr)
 	log.Fatal(srv.ListenAndServeTLS(crt, key))
 }
@@ -297,12 +297,20 @@ func serverEncrypt(secretMessage string, key *rsa.PublicKey) (string, error) {
 	return base64.StdEncoding.EncodeToString(ciphertext), nil
 }
 
+// Connect method make a database connection
+func GetServerCertificate() (string, string) {
+	crt := database.CreateSSLCert("api-server.crt", os.Getenv("API_SSL_CERT"))
+	key := database.CreateSSLCert("api-server.key", os.Getenv("API_SSL_KEY"))
+	return crt, key
+}
+
 // GenerateSelfSignedCert creates a self-signed certificate and key for the given host.
 // Host may be an IP or a DNS name
 // The certificate will be created with file mode 0644. The key will be created with file mode 0600.
 // If the certificate or key files already exist, they will be overwritten.
 // Any parent directories of the certPath or keyPath will be created as needed with file mode 0755.
-func GenerateSelfSignedCert(host, certPath, keyPath string) error {
+func GenerateSelfSignedCert(certPath, keyPath string) error {
+	host := os.Getenv("SERVER_HOST")
 	priv, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
 		return err
