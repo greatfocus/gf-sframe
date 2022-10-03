@@ -302,9 +302,17 @@ func serverEncrypt(secretMessage string, key *rsa.PublicKey) (string, error) {
 
 // Connect method make a database connection
 func GetServerCertificate() (string, string) {
-	crt := database.CreateSSLCert("api-server.crt", os.Getenv("API_SSL_CERT"))
-	key := database.CreateSSLCert("api-server.key", os.Getenv("API_SSL_KEY"))
-	return crt, key
+	var sslcert = os.Getenv("API_SSL_CERT")
+	var sslkey = os.Getenv("API_SSL_KEY")
+
+	// prepare ssl connection files
+	if sslkey != "" && sslcert != "" {
+		crt := database.CreateSSLCert("api-server.crt", sslcert)
+		key := database.CreateSSLCert("api-server.key", sslkey)
+		return crt, key
+	}
+
+	return "", ""
 }
 
 // GenerateSelfSignedCert creates a self-signed certificate and key for the given host.
