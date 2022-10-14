@@ -1,14 +1,17 @@
 package server
 
 import (
-	"crypto/x509"
 	"net/http"
 	"time"
 
 	"github.com/google/uuid"
-
-	sframeModel "github.com/greatfocus/gf-sframe/model"
 )
+
+// ServiceInfo struct
+type ServiceInfo struct {
+	ServiceName string `json:"serviceName,omitempty"`
+	RequestID   string `json:"requestId,omitempty"`
+}
 
 // Info struct
 type Info struct {
@@ -30,23 +33,15 @@ func (i Info) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// catch all
 	// if no method is satisfied return an error
 	w.WriteHeader(http.StatusMethodNotAllowed)
-	w.Header().Add("Allow", "GET, POST, PUT, DELETE")
+	w.Header().Add("Allow", "GET")
 }
 
 // getInfo method
 func (i *Info) getInfo(w http.ResponseWriter, r *http.Request) {
-	publicKeyBytes, err := x509.MarshalPKIXPublicKey(i.meta.ServerPublicKey)
-	if err != nil {
-		i.meta.Logger.ErrorLogger.Printf("Error: %v\n", err)
-		w.WriteHeader(http.StatusExpectationFailed)
-		i.meta.Error(w, r, err)
-		return
-	}
-
 	uuid := uuid.New().String()
-	res := sframeModel.Meta{
-		PublicKey: string(publicKeyBytes),
-		RequestID: uuid,
+	res := ServiceInfo{
+		ServiceName: i.meta.URI,
+		RequestID:   uuid,
 	}
 	i.meta.Cache.Set(uuid, uuid, time.Duration(1))
 	i.meta.Success(w, r, res)

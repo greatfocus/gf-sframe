@@ -102,7 +102,7 @@ func (m *Meta) setUploadPath() {
 func (m *Meta) defaultHandler() {
 	infoHandler := Info{}
 	infoHandler.Init(m)
-	m.Mux.Handle("/"+m.URI+"/meta", Use(infoHandler,
+	m.Mux.Handle("/"+m.URI+"/info", Use(infoHandler,
 		SetHeaders(),
 		CheckLimitsRates(),
 		WithoutAuth()))
