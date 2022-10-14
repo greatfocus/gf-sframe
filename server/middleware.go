@@ -18,7 +18,6 @@ import (
 // 6. Check Permissions
 // 7. CheckAuth/WithoutAuth
 // 8. CheckProcessTimeout
-// 9. CheckDecryption
 
 // SetHeaders // prepare header response
 func SetHeaders() Middleware {
@@ -204,25 +203,6 @@ func CheckProcessTimeout(meta *Meta) Middleware {
 				meta.Logger.ErrorLogger.Println([]byte(`{"error": "process timeout"}`))
 			case <-processDone:
 			}
-		})
-	}
-}
-
-// CheckDecryption validates request payload encryption
-func CheckDecryption(meta *Meta) Middleware {
-	return func(h http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-
-			// validate payload
-			_, err := meta.Request(w, r)
-			if err != nil {
-				w.WriteHeader(http.StatusNotAcceptable)
-				meta.Error(w, r, err)
-				return
-			}
-
-			// continue
-			h.ServeHTTP(w, r)
 		})
 	}
 }

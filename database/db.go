@@ -207,11 +207,15 @@ func (c *Conn) Insert(ctx context.Context, query string, args ...interface{}) (i
 
 // Query method make a resultset rows query to the databases
 func (c *Conn) Query(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
-	rows, err := c.conn.QueryContext(ctx, query, args...)
+	stmt, err := c.conn.PrepareContext(ctx, query)
+	if err != nil {
+		return &sql.Rows{}, err
+	}
 	defer func() {
-		_ = rows.Close()
+		_ = stmt.Close()
 	}()
-	return rows, err
+
+	return stmt.QueryContext(ctx, args...)
 }
 
 // Select method make a single row query to the databases

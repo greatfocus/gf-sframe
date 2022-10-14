@@ -1,12 +1,9 @@
 package server
 
 import (
-	"bytes"
 	"crypto/rand"
 	"crypto/rsa"
-	"crypto/sha256"
 	"crypto/x509"
-	"crypto/x509/pkix"
 	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
@@ -14,12 +11,8 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
-	"math/big"
-	"net"
 	"net/http"
 	"os"
-	"path/filepath"
-	"regexp"
 	"strconv"
 	"time"
 
@@ -54,31 +47,34 @@ type Meta struct {
 
 // Response result
 type Response struct {
-	Result string `json:"result,omitempty"`
-}
-
-// Request params
-type Request struct {
-	Data string `json:"data,omitempty"`
+	Result    string `json:"result,omitempty"`
+	CipherRes string `json:"cipherRes,omitempty"`
 }
 
 // Params
 type Params struct {
-	ID     string      `json:"id,omitempty"`
-	Params interface{} `json:"params,omitempty"`
+	ID        string      `json:"id,omitempty"`
+	Params    interface{} `json:"params,omitempty"`
+	CipherReq string      `json:"cipherReq,omitempty"`
 }
 
 // Start the server
 func (m *Meta) Start() {
-	// Generate encryption keys
-	publicKey, privatekey := generatePKI()
+	// Get encryption keys
+	privatekey, publicKey := GetServerPKI()
 	m.ServerPublicKey = publicKey
 	m.serverPrivateKey = privatekey
 	clientPublicKey := os.Getenv("CLIENT_PUBLICKEY")
 	if clientPublicKey != "" {
-		block, _ := pem.Decode([]byte(clientPublicKey))
-		key, _ := x509.ParsePKCS1PublicKey(block.Bytes)
-		m.clientPublicKey = key
+		clientPublicKeyString, err := base64.StdEncoding.DecodeString(clientPublicKey)
+		if err == nil {
+			publicBlock, _ := pem.Decode([]byte(clientPublicKeyString))
+			pubKey, err := x509.ParsePKIXPublicKey(publicBlock.Bytes)
+			if err == nil {
+				m.clientPublicKey = pubKey.(*rsa.PublicKey)
+			}
+
+		}
 	}
 
 	// setUploadPath creates an upload path
@@ -129,14 +125,6 @@ func (m *Meta) serve() {
 		Handler:        m.Mux,
 	}
 
-	// generate self-sing key
-	// crt := os.Getenv("APP_PATH") + "/ssl/api-server.crt"
-	// key := os.Getenv("APP_PATH") + "/ssl/api-server.key"
-	// err = GenerateSelfSignedCert(crt, key)
-	// if err != nil {
-	// 	log.Fatal(fmt.Println(err))
-	// }
-
 	// Get key certificate
 	m.Logger.InfoLogger.Println("Listening to port HTTP", addr)
 	crt, key := GetServerCertificate()
@@ -170,18 +158,9 @@ func (m *Meta) Error(w http.ResponseWriter, r *http.Request, err error) {
 
 // request returns payload
 func (m *Meta) Request(w http.ResponseWriter, r *http.Request) (interface{}, error) {
-	req := Params{}
-	body, err := ioutil.ReadAll(r.Body)
-	if err != nil {
-		derr := errors.New("invalid payload request")
-		w.WriteHeader(http.StatusBadRequest)
-		m.Error(w, r, derr)
-		return nil, err
-	}
-
-	if m.clientPublicKey != nil {
-		request := Request{}
-		err = json.Unmarshal(body, &request)
+	if r.Method == http.MethodPost || r.Method == http.MethodPut {
+		req := Params{}
+		body, err := ioutil.ReadAll(r.Body)
 		if err != nil {
 			derr := errors.New("invalid payload request")
 			w.WriteHeader(http.StatusBadRequest)
@@ -189,13 +168,6 @@ func (m *Meta) Request(w http.ResponseWriter, r *http.Request) (interface{}, err
 			return nil, err
 		}
 
-		req, err = serverDecrypt(request.Data, m.serverPrivateKey)
-		if err != nil {
-			w.WriteHeader(http.StatusBadRequest)
-			m.Error(w, r, err)
-			return nil, err
-		}
-	} else {
 		err = json.Unmarshal(body, &req)
 		if err != nil {
 			derr := errors.New("invalid payload request")
@@ -203,15 +175,26 @@ func (m *Meta) Request(w http.ResponseWriter, r *http.Request) (interface{}, err
 			m.Error(w, r, derr)
 			return nil, err
 		}
-	}
 
-	err = m.checkRequestId(req)
-	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		m.Error(w, r, err)
-		return nil, err
+		err = m.checkRequestId(req)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			m.Error(w, r, err)
+			return nil, err
+		}
+
+		if m.clientPublicKey != nil {
+			res, err := serverDecrypt(req.CipherReq, m.serverPrivateKey)
+			if err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				m.Error(w, r, err)
+				return nil, err
+			}
+			return res.Params, nil
+		}
+		return req.Params, nil
 	}
-	return req.Params, nil
+	return nil, nil
 }
 
 // CheckRequestId validates requestID
@@ -239,7 +222,7 @@ func (m *Meta) response(w http.ResponseWriter, r *http.Request, data interface{}
 			m.Error(w, r, err)
 		}
 		res := Response{
-			Result: result,
+			CipherRes: result,
 		}
 		_ = json.NewEncoder(w).Encode(res)
 	} else {
@@ -252,27 +235,15 @@ func (m *Meta) response(w http.ResponseWriter, r *http.Request, data interface{}
 }
 
 // decrypt payload
-func serverDecrypt(cipherText string, key *rsa.PrivateKey) (Params, error) {
+func serverDecrypt(cipherText string, privateKey *rsa.PrivateKey) (Params, error) {
 	params := Params{}
 	ct, _ := base64.StdEncoding.DecodeString(cipherText)
-	label := []byte("OAEP Encrypted")
-	rng := rand.Reader
-	plaintext, err := rsa.DecryptOAEP(sha256.New(), rng, key, ct, label)
+	unencrypted, err := rsa.DecryptPKCS1v15(rand.Reader, privateKey, ct)
 	if err != nil {
 		derr := errors.New("invalid payload request")
 		return params, derr
 	}
-
-	// validate special characters
-	var data = string(plaintext)
-	var payload = regexp.MustCompile(`^[a-zA-Z0-9_]*$`)
-	var isValid = payload.MatchString(data)
-	if !isValid {
-		derr := errors.New("invalid payload request")
-		return params, derr
-	}
-
-	err = json.Unmarshal(plaintext, &params)
+	err = json.Unmarshal([]byte(unencrypted), &params)
 	if err != nil {
 		derr := errors.New("invalid payload request")
 		return params, derr
@@ -280,31 +251,17 @@ func serverDecrypt(cipherText string, key *rsa.PrivateKey) (Params, error) {
 	return params, nil
 }
 
-// generatePKI provides encryption keys
-func generatePKI() (*rsa.PublicKey, *rsa.PrivateKey) {
-	// generate key
-	privatekey, err := rsa.GenerateKey(rand.Reader, 2048)
-	if err != nil {
-		fmt.Printf("Cannot generate RSA key\n")
-		os.Exit(1)
-	}
-
-	return &privatekey.PublicKey, privatekey
-}
-
 // encrypt payload
-func serverEncrypt(secretMessage string, key *rsa.PublicKey) (string, error) {
-	label := []byte("OAEP Encrypted")
-	rng := rand.Reader
-	ciphertext, err := rsa.EncryptOAEP(sha256.New(), rng, key, []byte(secretMessage), label)
+func serverEncrypt(payload string, publicKey *rsa.PublicKey) (string, error) {
+	encrypted, err := rsa.EncryptPKCS1v15(rand.Reader, publicKey, []byte(payload))
 	if err != nil {
 		derr := errors.New("invalid payload request")
 		return "", derr
 	}
-	return base64.StdEncoding.EncodeToString(ciphertext), nil
+	return base64.StdEncoding.EncodeToString(encrypted), nil
 }
 
-// Connect method make a database connection
+// GetServerCertificate returns private and public key
 func GetServerCertificate() (string, string) {
 	var sslcert = os.Getenv("API_SSL_CERT")
 	var sslkey = os.Getenv("API_SSL_KEY")
@@ -319,69 +276,29 @@ func GetServerCertificate() (string, string) {
 	return "", ""
 }
 
-// GenerateSelfSignedCert creates a self-signed certificate and key for the given host.
-// Host may be an IP or a DNS name
-// The certificate will be created with file mode 0644. The key will be created with file mode 0600.
-// If the certificate or key files already exist, they will be overwritten.
-// Any parent directories of the certPath or keyPath will be created as needed with file mode 0755.
-func GenerateSelfSignedCert(certPath, keyPath string) error {
-	host := os.Getenv("SERVER_HOST")
-	priv, err := rsa.GenerateKey(rand.Reader, 2048)
+// GetServerPKI returns public key infrustructure
+func GetServerPKI() (*rsa.PrivateKey, *rsa.PublicKey) {
+	var privateKey = os.Getenv("API_PRIVATE_KEY")
+	privateKeyString, err := base64.StdEncoding.DecodeString(privateKey)
 	if err != nil {
-		return err
+		return nil, nil
 	}
-
-	template := x509.Certificate{
-		SerialNumber: big.NewInt(1),
-		Subject: pkix.Name{
-			CommonName: fmt.Sprintf("%s@%d", host, time.Now().Unix()),
-		},
-		NotBefore: time.Now(),
-		NotAfter:  time.Now().Add(time.Hour * 24 * 365),
-
-		KeyUsage:              x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
-		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
-		BasicConstraintsValid: true,
-	}
-
-	if ip := net.ParseIP(host); ip != nil {
-		template.IPAddresses = append(template.IPAddresses, ip)
-	} else {
-		template.DNSNames = append(template.DNSNames, host)
-	}
-
-	derBytes, err := x509.CreateCertificate(rand.Reader, &template, &template, &priv.PublicKey, priv)
+	privateBlock, _ := pem.Decode([]byte(privateKeyString))
+	privKey, err := x509.ParsePKCS1PrivateKey(privateBlock.Bytes)
 	if err != nil {
-		return err
+		return nil, nil
 	}
 
-	// Generate cert
-	certBuffer := bytes.Buffer{}
-	if err := pem.Encode(&certBuffer, &pem.Block{Type: "CERTIFICATE", Bytes: derBytes}); err != nil {
-		return err
+	var publicKey = os.Getenv("API_PUBLIC_KEY")
+	publicKeyString, err := base64.StdEncoding.DecodeString(publicKey)
+	if err != nil {
+		return nil, nil
+	}
+	publicBlock, _ := pem.Decode([]byte(publicKeyString))
+	pubKey, err := x509.ParsePKIXPublicKey(publicBlock.Bytes)
+	if err != nil {
+		return nil, nil
 	}
 
-	// Generate key
-	keyBuffer := bytes.Buffer{}
-	if err := pem.Encode(&keyBuffer, &pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(priv)}); err != nil {
-		return err
-	}
-
-	// Write cert
-	if err := os.MkdirAll(filepath.Dir(certPath), os.FileMode(0755)); err != nil {
-		return err
-	}
-	if err := ioutil.WriteFile(certPath, certBuffer.Bytes(), os.FileMode(0644)); err != nil {
-		return err
-	}
-
-	// Write key
-	if err := os.MkdirAll(filepath.Dir(keyPath), os.FileMode(0755)); err != nil {
-		return err
-	}
-	if err := ioutil.WriteFile(keyPath, keyBuffer.Bytes(), os.FileMode(0600)); err != nil {
-		return err
-	}
-
-	return nil
+	return privKey, pubKey.(*rsa.PublicKey)
 }
