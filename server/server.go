@@ -18,7 +18,6 @@ import (
 
 	gfbus "github.com/greatfocus/gf-bus"
 	gfcron "github.com/greatfocus/gf-cron"
-	"github.com/greatfocus/gf-sframe/broker"
 	"github.com/greatfocus/gf-sframe/cache"
 	"github.com/greatfocus/gf-sframe/database"
 	"github.com/greatfocus/gf-sframe/logger"
@@ -37,7 +36,6 @@ type Meta struct {
 	Cron             *gfcron.Cron
 	JWT              *JWT
 	Bus              *gfbus.Bus
-	Broker           *broker.Conn
 	Logger           *logger.Logger
 	clientPublicKey  *rsa.PublicKey
 	ServerPublicKey  *rsa.PublicKey

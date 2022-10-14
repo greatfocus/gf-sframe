@@ -1,33 +1,65 @@
 package broker
 
 import (
+	"log"
+	"os"
+
 	amqp "github.com/greatfocus/gf-amqp"
 )
 
-// Conn -
-type Conn struct {
-	Channel *amqp.Channel
+var appId = "a6ced560-ea7a-4693-b990-7aada41982bf"
+
+// Rabbitmq -
+type Rabbitmq struct {
+	conn *amqp.Connection
+	ch   *amqp.Channel
+	err  error
 }
 
 // GetConn -
-func GetConn(rabbitURL string) (*Conn, error) {
-	conn, err := amqp.Dial(rabbitURL)
-	if err != nil {
-		return &Conn{}, err
+func GetConn() (*Rabbitmq, error) {
+	rabbitURL := os.Getenv("RABBITMQ_URL")
+	rmq := &Rabbitmq{}
+
+	rmq.conn, rmq.err = amqp.Dial(rabbitURL)
+	if rmq.err != nil {
+		return rmq, rmq.err
 	}
 
-	ch, err := conn.Channel()
-	return &Conn{
-		Channel: ch,
-	}, err
+	rmq.ch, rmq.err = rmq.conn.Channel()
+	if rmq.err != nil {
+		return rmq, rmq.err
+	}
+
+	return rmq, nil
 }
 
 // Publish -
-func (conn Conn) Publish(exchange string, routingKey string, data []byte) error {
-	return conn.Channel.Publish(
+func Publish(data []byte) error {
+	// get connection
+	conn, err := GetConn()
+	if err != nil {
+		return err
+	}
+
+	err = conn.ch.ExchangeDeclare(
+		appId,
+		"fanout",
+		true,
+		false,
+		false,
+		false,
+		nil,
+	)
+	if err != nil {
+		return err
+	}
+
+	log.Printf("Broker published a massage: %s", data)
+	return conn.ch.Publish(
 		// exchange - yours may be different
-		exchange,
-		routingKey,
+		appId,
+		appId,
 		// mandatory - we don't care if there I no queue
 		false,
 		// immediate - we don't care if there is no consumer on the queue
@@ -40,30 +72,49 @@ func (conn Conn) Publish(exchange string, routingKey string, data []byte) error 
 }
 
 // StartConsumer -
-func (conn Conn) StartConsumer(exchange, queueName, routingKey, ctag string, handler func(d amqp.Delivery) bool, concurrency int) error {
+func Consumer(queueName string, handler func(d amqp.Delivery) bool, concurrency int) error {
+	// get connection
+	conn, err := GetConn()
+	if err != nil {
+		return err
+	}
+
+	err = conn.ch.ExchangeDeclare(
+		appId,
+		"fanout",
+		true,
+		false,
+		false,
+		false,
+		nil,
+	)
+	if err != nil {
+		return err
+	}
+
 	// create the queue if it doesn't already exist
-	_, err := conn.Channel.QueueDeclare(queueName, true, false, false, false, nil)
+	_, err = conn.ch.QueueDeclare(queueName, true, false, false, false, nil)
 	if err != nil {
 		return err
 	}
 
 	// bind the queue to the routing key
-	err = conn.Channel.QueueBind(queueName, routingKey, exchange, false, nil)
+	err = conn.ch.QueueBind(queueName, appId, appId, false, nil)
 	if err != nil {
 		return err
 	}
 
 	// prefetch 4x as many messages as we can handle at once
 	prefetchCount := concurrency * 4
-	err = conn.Channel.Qos(prefetchCount, 0, false)
+	err = conn.ch.Qos(prefetchCount, 0, false)
 	if err != nil {
 		return err
 	}
 
-	msgs, err := conn.Channel.Consume(
+	msgs, err := conn.ch.Consume(
 		queueName, // queue
-		ctag,      // consumer
-		false,     // auto-ack
+		"",        // consumer
+		true,      // auto-ack
 		false,     // exclusive
 		false,     // no-local
 		false,     // no-wait
@@ -75,11 +126,13 @@ func (conn Conn) StartConsumer(exchange, queueName, routingKey, ctag string, han
 
 	// create a goroutine for the number of concurrent threads requested
 	for i := 0; i < concurrency; i++ {
+		log.Printf("Processing messages on thread %v...\n", i)
 		go func() {
 			for msg := range msgs {
 				// if tha handler returns true then ACK, else NACK
 				// the message back into the rabbit queue for
 				// another round of processing
+				log.Printf("Broker received a massage: %s", msg.Body)
 				if handler(msg) {
 					_ = msg.Ack(false)
 				} else {
@@ -88,5 +141,6 @@ func (conn Conn) StartConsumer(exchange, queueName, routingKey, ctag string, han
 			}
 		}()
 	}
+
 	return nil
 }
