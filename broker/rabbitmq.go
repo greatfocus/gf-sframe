@@ -40,10 +40,11 @@ func Publish(queueName, routingKey, messageId string, data []byte) error {
 	// get connection
 	var appId = os.Getenv("APP_ID")
 	expiry, err := strconv.ParseUint(os.Getenv("MESSAGE_EXPIRY"), 0, 64)
-	expire := time.Duration(expiry) * time.Hour
 	if err != nil {
 		return err
 	}
+	expire := int(time.Duration(int(expiry)) * time.Hour)
+
 	conn, err := GetConn()
 	if err != nil {
 		return err
