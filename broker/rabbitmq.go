@@ -1,8 +1,11 @@
 package broker
 
 import (
+	"fmt"
 	"log"
 	"os"
+	"strconv"
+	"time"
 
 	amqp "github.com/greatfocus/gf-amqp"
 )
@@ -36,6 +39,11 @@ func GetConn() (*Rabbitmq, error) {
 func Publish(queueName, routingKey, messageId string, data []byte) error {
 	// get connection
 	var appId = os.Getenv("APP_ID")
+	expiry, err := strconv.ParseUint(os.Getenv("MESSAGE_EXPIRY"), 0, 64)
+	expire := time.Duration(expiry) * time.Hour
+	if err != nil {
+		return err
+	}
 	conn, err := GetConn()
 	if err != nil {
 		return err
@@ -78,6 +86,7 @@ func Publish(queueName, routingKey, messageId string, data []byte) error {
 			ContentType:  "application/json",
 			Body:         data,
 			DeliveryMode: amqp.Persistent,
+			Expiration:   fmt.Sprint(expire),
 		})
 	if err != nil {
 		return err
