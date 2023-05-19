@@ -13,6 +13,7 @@ type JWT interface {
 	CreateToken(tokenInfo TokenInfo) (string, error)
 	IsValidToken(r *http.Request) bool
 	GetTokenInfo(r *http.Request) (*TokenInfo, error)
+	Secret() string
 }
 
 // TokenInfo struct
@@ -80,6 +81,11 @@ func (j *jwt) GetTokenInfo(r *http.Request) (*TokenInfo, error) {
 	claims := token.Claims.(jwt5.MapClaims)
 	data := claims["data"].(TokenInfo)
 	return &data, nil
+}
+
+// GetSecret returns secret information
+func (j *jwt) Secret() string {
+	return j.secret
 }
 
 // getToken get jwt from header

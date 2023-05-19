@@ -8,8 +8,6 @@ import (
 	"time"
 )
 
-var AllowedOrigin string
-var AlowedIps string
 var Limiter = NewThrottle()
 
 // SetHeaders // prepare header response
@@ -41,16 +39,16 @@ func Preflight() Middleware {
 	}
 }
 
-// CheckCors enable cors within the http handler
-func CheckCors() Middleware {
+// IsAllowedOrigin enable cors within the http handler
+func IsAllowedOrigin(allowedOrigin string) Middleware {
 	return func(h http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 
 			allowed := false
-			origin := r.Header.Get("Origin")
+			origin := ip(r)
 
 			// check if cors is available in list
-			origins := strings.Split(AllowedOrigin, ",")
+			origins := strings.Split(allowedOrigin, ",")
 			for _, v := range origins {
 				if v == origin {
 					allowed = true
@@ -69,8 +67,8 @@ func CheckCors() Middleware {
 	}
 }
 
-// CheckThrottle handle limits and rates
-func CheckThrottle() Middleware {
+// IsThrottle handle limits and rates
+func IsThrottle() Middleware {
 	return func(h http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 
@@ -86,14 +84,14 @@ func CheckThrottle() Middleware {
 	}
 }
 
-// CheckAllowedIPs allow specific IP address
-func CheckAllowedIPs() Middleware {
+// IsAllowedIPs allow specific IP address
+func IsAllowedIPs(allowedIps string) Middleware {
 	return func(h http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 
 			allowed := false
 			// check if ip is available in list
-			ips := strings.Split(AlowedIps, ",")
+			ips := strings.Split(allowedIps, ",")
 			for _, v := range ips {
 				if v == ip(r) {
 					allowed = true
@@ -111,8 +109,8 @@ func CheckAllowedIPs() Middleware {
 	}
 }
 
-// CheckPermission validate if users is allowed to access route
-func CheckPermission(jwt JWT) Middleware {
+// IsAuthorized validate if users is allowed to access route
+func IsAuthorized(jwt JWT) Middleware {
 	return func(h http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			token, err := jwt.GetTokenInfo(r)
@@ -166,8 +164,8 @@ func ProcessTimeout(timeout time.Duration) Middleware {
 	}
 }
 
-// CheckAuth validates request for jwt header
-func CheckAuth(jwt JWT) Middleware {
+// IsAuthenticated validates request for jwt header
+func IsAuthenticated(jwt JWT) Middleware {
 	return func(h http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 
@@ -183,8 +181,8 @@ func CheckAuth(jwt JWT) Middleware {
 	}
 }
 
-// WithoutAuth access without authentications
-func WithoutAuth() Middleware {
+// NoAuthentication access without authentications
+func NoAuthentication() Middleware {
 	return func(h http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// continue

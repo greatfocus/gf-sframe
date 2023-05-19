@@ -3,7 +3,6 @@ package broker
 import (
 	"context"
 	"fmt"
-	"log"
 	"time"
 
 	amqp "github.com/rabbitmq/amqp091-go"
@@ -55,7 +54,6 @@ func Producer(param ProducerParam) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(10*time.Second))
 	defer cancel()
 
-	log.Printf("Broker published a message: %s", param.Data)
 	err = channel.PublishWithContext(
 		ctx,
 		"",         // exchange

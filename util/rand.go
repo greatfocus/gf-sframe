@@ -24,7 +24,7 @@ func RandNumber(size int) int64 {
 
 // RandomString generates string
 func RandString(leng int64) string {
-	rand.Seed(time.Now().UnixNano())
+	rand.New(rand.NewSource(time.Now().UnixNano()))
 	var output strings.Builder
 	var charSet = "abcdedfghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 	var length = 20
