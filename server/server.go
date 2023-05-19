@@ -71,7 +71,7 @@ type Server struct {
 }
 
 // Start the server
-func (s *Server) Start(mux *http.ServeMux) {
+func (s *Server) Start() {
 	// Get encryption keys
 	privatekey, publicKey := GetServerPKI()
 	s.ServerPublicKey = publicKey
@@ -128,7 +128,7 @@ func initJWT() JWT {
 }
 
 func initDatabase(logger logger.Logger) database.Database {
-	log.Println("Preparing Database configuration")
+	logger.Info(fmt.Sprintln("Preparing Database configuration"))
 	host := os.Getenv("DB_HOST")
 	databaseName := os.Getenv("DB_NAME")
 	user := os.Getenv("DB_USER")
